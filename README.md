@@ -1,89 +1,243 @@
-# Medical RAG API Demo (Free Model Version)
+<div align="center">
 
-A production-style RAG project for interview preparation using a free local model.
+# 🩺 Medical RAG Assistant
 
-## What this project includes
-- FastAPI service
-- RAG pipeline with LangChain
-- FAISS vector index
-- Hugging Face embeddings
-- Free local LLM through Ollama
-- Redis cache
-- PostgreSQL logging
-- Docker + docker-compose
-- Simple evaluation script
+**A production-style medical Q&A system powered by local LLMs, semantic retrieval, and safety guardrails.**
 
-## Dataset
-This project uses MedQuAD from Hugging Face (`lavita/MedQuAD`).
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-black?style=flat-square)](https://ollama.com)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-## Recommended free model
-Default setup uses Ollama with:
-- `llama3.1:8b`
+*Built for educational and portfolio purposes — not a clinical diagnostic system.*
 
-You can switch to smaller/faster models by editing `.env`, for example:
-- `qwen2.5:7b`
-- `gemma2:9b`
-- `phi3:mini`
+</div>
+
+---
+
+## Overview
+
+Medical RAG Assistant combines **FastAPI**, **FAISS**, and **Ollama** to answer medical questions using retrieval-augmented generation. Questions are answered by retrieving relevant context from the [MedQuAD](https://github.com/abachaa/MedQuAD) knowledge base before passing it to a local LLM — keeping everything private and offline.
+
+```
+User Question
+    ↓
+FastAPI (/chat)
+    ↓
+RAG Service
+    ├── 🛡️  Safety Check          ← rule-based urgent symptom detection
+    ├── 🔍  FAISS Retrieval        ← semantic search over MedQuAD
+    ├── 📝  Context Assembly
+    └── 🧠  LLM Generation         ← Ollama (phi3:mini, local)
+    ↓
+Response + Sources + Safety Metadata
+    ↓
+SQLite Logging + In-Memory Cache
+```
+
+---
+
+## Features
+
+| | Feature | Details |
+|---|---|---|
+| ⚡ | **FastAPI REST API** | Auto-docs at `/docs`, async handlers, Pydantic validation |
+| 🔍 | **Semantic retrieval** | FAISS index with `all-MiniLM-L6-v2` embeddings |
+| 🧠 | **Local LLM inference** | Runs via Ollama — no API keys, fully offline |
+| 📚 | **MedQuAD knowledge base** | NIH-sourced medical Q&A pairs |
+| 🛡️ | **Safety guardrails** | Detects urgent symptoms, flags and prepends warnings |
+| 🐛 | **Retrieval debugging** | `/debug/retrieve` exposes raw retrieved chunks |
+| 💾 | **SQLite logging** | Lightweight query logging for local development |
+| ⚡ | **In-memory caching** | Configurable TTL to skip repeated retrievals |
+
+---
+
+## Tech Stack
+
+`Python` · `FastAPI` · `FAISS` · `LangChain` · `Ollama` · `Sentence Transformers` · `SQLite` · `Pydantic` · `SQLAlchemy`
+
+---
+
+## Project Structure
+
+```
+medical-rag-assistant/
+├── app/
+│   ├── cache.py        # in-memory query cache
+│   ├── config.py       # env + settings
+│   ├── db.py           # SQLite logging
+│   ├── main.py         # FastAPI app + routes
+│   ├── prompts.py      # LLM prompt templates
+│   ├── rag.py          # core RAG service
+│   └── schemas.py      # Pydantic request/response models
+├── scripts/
+│   └── build_index.py  # builds FAISS index from MedQuAD
+├── .env.example
+├── ARCHITECTURE.md
+├── README.md
+└── requirements.txt
+```
+
+---
+
+## API Reference
+
+### `GET /health`
+Returns service health status.
+
+---
+
+### `POST /chat`
+Generates a grounded medical response using RAG.
+
+**Request**
+```json
+{
+  "session_id": "demo-1",
+  "question": "What are the symptoms of asthma?"
+}
+```
+
+**Response**
+```json
+{
+  "answer": "Common symptoms of asthma include wheezing, chest tightness, shortness of breath, and coughing...",
+  "sources": [
+    {
+      "source": "NHLBI",
+      "focus": "unknown",
+      "question": "What are the symptoms of Asthma?"
+    }
+  ],
+  "cached": false,
+  "safety_alert": false,
+  "safety_message": ""
+}
+```
+
+---
+
+### `POST /debug/retrieve`
+Returns the raw retrieved chunks used during semantic search — useful for inspecting retrieval quality and tuning `TOP_K`.
+
+**Request**
+```json
+{
+  "session_id": "demo-1",
+  "question": "What are the symptoms of asthma?"
+}
+```
+
+---
 
 ## Setup
 
-### 1) Install Ollama and pull a free model
+### Prerequisites
+- Python 3.9+
+- [Ollama](https://ollama.com) installed locally
+
+### 1. Clone
 
 ```bash
-ollama pull llama3.1:8b
+git clone https://github.com/YOUR_USERNAME/medical-rag-assistant.git
+cd medical-rag-assistant
 ```
 
-### 2) Prepare the project
+### 2. Create virtual environment
 
 ```bash
-cp .env.example .env
+# Linux / macOS
+python -m venv .venv && source .venv/bin/activate
+
+# Windows PowerShell
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python scripts/build_index.py
-uvicorn app.main:app --reload
+.venv\Scripts\Activate
 ```
 
-## Run with Docker for Postgres + Redis
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure environment
 
 ```bash
 cp .env.example .env
-mkdir -p storage
+```
+
+Edit `.env` with your values:
+
+```env
+ENVIRONMENT=dev
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=phi3:mini
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+VECTOR_INDEX_PATH=./storage/faiss_medquad
+TOP_K=4
+POSTGRES_URL=sqlite:///./medical_rag.db
+CACHE_TTL_SECONDS=1800
+```
+
+### 5. Start Ollama and pull model
+
+```bash
+ollama serve
+ollama pull phi3:mini
+```
+
+### 6. Build the FAISS index
+
+```bash
 python scripts/build_index.py
-docker compose up postgres redis -d
+```
+
+### 7. Run the API
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-Note: the API connects to Ollama on `http://localhost:11434`, so keep Ollama running on your machine.
+Open Swagger UI at **http://localhost:8000/docs**
 
-## Test the API
+---
 
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "demo-session-1",
-    "question": "What are the symptoms of asthma?"
-  }'
-```
+## Safety Guardrails
 
-## Endpoints
-- `GET /health`
-- `POST /chat`
+The API includes lightweight rule-based detection for urgent symptom patterns. When triggered, the response includes `safety_alert: true`, a warning message, and an urgent notice prepended to the answer.
 
-## Architecture
+Detected patterns include: `severe chest pain` · `difficulty breathing` · `fainting` · `seizure` · `severe bleeding` · `vomiting blood`
 
-1. `scripts/build_index.py` downloads MedQuAD and builds FAISS.
-2. `/chat` receives a question.
-3. RAG retrieves top-k relevant chunks.
-4. Local LLM answers only from retrieved context.
-5. Redis caches repeated questions.
-6. PostgreSQL stores question, answer, and context for observability.
+> ⚕️ **Disclaimer:** This project is for educational and engineering demonstration purposes only. It is **not** a real clinical diagnostic system and should not be used for medical advice.
 
-## Interview talking points
-- Why Ollama? Free local inference, easy demos, and no API cost.
-- Why RAG? To ground answers in trusted data and reduce hallucination.
-- Why FAISS? Lightweight local vector retrieval.
-- Why Redis? Faster repeated queries and lower cost.
-- Why PostgreSQL? Logging, analytics, and auditability.
-- How to improve? Add guardrails, better eval, async workers, and model routing.
+---
+
+## Engineering Concepts
+
+This project demonstrates:
+
+- **Retrieval-Augmented Generation (RAG)** — grounding LLM outputs in retrieved knowledge
+- **Local LLM orchestration** — privacy-preserving inference with Ollama
+- **Semantic search** — FAISS vector index with sentence-transformer embeddings
+- **Observability** — retrieval debugging endpoint for inspecting pipeline internals
+- **Safety escalation** — rule-based guardrails with structured API metadata
+- **Backend API design** — production-style FastAPI with caching, logging, and validation
+
+---
+
+## Roadmap
+
+- [ ] Reranking for retrieved chunks
+- [ ] Streaming responses
+- [ ] Structured evaluation pipeline
+- [ ] PostgreSQL + Redis production profiles
+- [ ] Authentication and rate limiting
+- [ ] Tests and CI pipeline
+- [ ] Docker support
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
